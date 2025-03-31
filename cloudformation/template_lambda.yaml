@@ -1,0 +1,65 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Template para desplegar la función Lambda que consume la API de SpaceX y actualiza DynamoDB
+
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SpaceXLambdaExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: DynamoDBAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:GetItem
+                Resource: "*"  # En producción, limitar al ARN de la tabla
+
+  SpaceXLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: SpaceXDataProcessor
+      Runtime: python3.8
+      Handler: lambda_function.lambda_handler
+      Timeout: 30
+      Code:
+        # Nota: En un entorno real se recomienda subir el ZIP a S3.
+        # Para LocalStack, actualizaremos el código con el comando update-function-code.
+        ZipFile: |
+          # Este bloque puede quedar vacío o con un código base, ya que actualizaremos el código desde el ZIP.
+          def lambda_handler(event, context):
+              return {"statusCode": 200, "body": "Placeholder"}
+      Environment:
+        Variables:
+          DYNAMODB_TABLE: SpaceXLaunches
+          # Para acceso desde el contenedor, usamos host.docker.internal
+          DYNAMODB_ENDPOINT: http://host.docker.internal:4566
+      Role: !GetAtt LambdaExecutionRole.Arn
+
+  LambdaScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: SpaceXLambdaScheduleRule
+      ScheduleExpression: rate(6 hours)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt SpaceXLambdaFunction.Arn
+          Id: "SpaceXLambdaTarget"
+
+  PermissionForEventsToInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SpaceXLambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt LambdaScheduleRule.Arn

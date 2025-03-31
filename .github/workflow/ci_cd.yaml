@@ -1,0 +1,39 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+
+    #env:
+     # AWS_REGION: ${{ secrets.AWS_REGION }}
+     # AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+
+      - name: Install dependencies and run tests
+        run: |
+          cd lambda
+          python -m pip install --upgrade pip
+          pip install -r dependencies.txt
+          pip install pytest
+          pytest
+
+      - name: Build Docker image for web app
+        run: |
+          cd appweb
+          docker build -t spacex-web-app .
+
+      - name: Deployment complete
+        run: echo "CI/CD pipeline executed successfully."

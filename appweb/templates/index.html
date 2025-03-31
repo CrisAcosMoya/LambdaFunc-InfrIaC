@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Lanzamientos SpaceX</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+<div class="container mt-5">
+    <h1>Lanzamientos SpaceX</h1>
+    <form method="get" class="mb-3">
+        <label for="status">Filtrar por estado:</label>
+        <select name="status" id="status" class="form-control w-25 d-inline-block">
+            <option value="">Todos</option>
+            <option value="success">Success</option>
+            <option value="failed">Failed</option>
+            <option value="upcoming">Upcoming</option>
+        </select>
+        <button type="submit" class="btn btn-primary">Filtrar</button>
+    </form>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Misión</th>
+                <th>Cohete</th>
+                <th>Fecha de Lanzamiento</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for launch in launches %}
+            <tr>
+                <td>{{ launch.mission_name }}</td>
+                <td>{{ launch.rocket }}</td>
+                <td>{{ launch.launch_date }}</td>
+                <td>{{ launch.status }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+</body>
+</html>
