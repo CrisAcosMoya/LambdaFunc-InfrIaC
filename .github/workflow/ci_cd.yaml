@@ -9,31 +9,86 @@ jobs:
   build-test-deploy:
     runs-on: ubuntu-latest
 
-    #env:
-     # AWS_REGION: ${{ secrets.AWS_REGION }}
-     # AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+      ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
+      ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up Python
+      - name: Set up Python 3.8
         uses: actions/setup-python@v4
         with:
           python-version: '3.8'
 
-      - name: Install dependencies and run tests
+      - name: Install dependencies and run tests (Lambda)
+        working-directory: lambda
         run: |
-          cd lambda
           python -m pip install --upgrade pip
           pip install -r dependencies.txt
           pip install pytest
           pytest
 
       - name: Build Docker image for web app
+        working-directory: appweb
         run: |
-          cd appweb
           docker build -t spacex-web-app .
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Authenticate to Amazon ECR
+        id: login-ecr
+        run: |
+          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Create ECR repository if not exists
+        run: |
+          aws ecr describe-repositories --repository-names $ECR_REPOSITORY --region $AWS_REGION || \
+          aws ecr create-repository --repository-name $ECR_REPOSITORY --region $AWS_REGION
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Tag and push Docker image to ECR
+        run: |
+          IMAGE_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
+          docker tag spacex-web-app:latest $IMAGE_URI
+          docker push $IMAGE_URI
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+
+      - name: Update ECS Service with new task definition
+        id: ecs-update
+        run: |
+          IMAGE_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY:latest
+          TASK_DEF_JSON=$(cat ecs-task.json)
+          UPDATED_TASK_DEF_JSON=$(echo "$TASK_DEF_JSON" | jq --arg IMAGE_URI "$IMAGE_URI" '.containerDefinitions[0].image = $IMAGE_URI')
+          echo "$UPDATED_TASK_DEF_JSON" > updated-ecs-task.json
+
+          aws ecs register-task-definition --cli-input-json file://updated-ecs-task.json --region $AWS_REGION
+
+          NEW_TASK_DEF=$(aws ecs describe-task-definition --task-definition spacex-web-app-task --region $AWS_REGION | jq -r '.taskDefinition.taskDefinitionArn')
+          echo "Nueva Task Definition ARN: $NEW_TASK_DEF"
+
+          aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE --task-definition $NEW_TASK_DEF --region $AWS_REGION
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
+          ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
 
       - name: Deployment complete
         run: echo "CI/CD pipeline executed successfully."
