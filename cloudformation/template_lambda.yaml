@@ -23,7 +23,7 @@ Resources:
                   - dynamodb:PutItem
                   - dynamodb:UpdateItem
                   - dynamodb:GetItem
-                Resource: "*"  # En producción, limitar al ARN de la tabla
+                Resource: "*" 
 
   SpaceXLambdaFunction:
     Type: AWS::Lambda::Function
@@ -33,16 +33,13 @@ Resources:
       Handler: lambda_function.lambda_handler
       Timeout: 30
       Code:
-        # Nota: En un entorno real se recomienda subir el ZIP a S3.
-        # Para LocalStack, actualizaremos el código con el comando update-function-code.
         ZipFile: |
-          # Este bloque puede quedar vacío o con un código base, ya que actualizaremos el código desde el ZIP.
+          # Este bloque puede quedar vacío o con un código base, ya que actualizar desde el ZIP.
           def lambda_handler(event, context):
               return {"statusCode": 200, "body": "Placeholder"}
       Environment:
         Variables:
           DYNAMODB_TABLE: SpaceXLaunches
-          # Para acceso desde el contenedor, usamos host.docker.internal
           DYNAMODB_ENDPOINT: http://host.docker.internal:4566
       Role: !GetAtt LambdaExecutionRole.Arn
 
